@@ -40,6 +40,25 @@ bot.on('chat', function (username, message) {
         const user = partyMessage[0].substring(0, partyMessage[0].length - 1)
         const command = partyMessage[1].substring(1)
 
+
+        // Command To List ALl Bots Items
+        if (command === 'list'){
+            // Function To Convert Item To String Name And Count
+            function itemToString (item) {
+                if (item) {
+                    return `${item.name} x ${item.count}`
+                } else {
+                    return '(nothing)'
+            }}
+            const items = bot.inventory.items().map(itemToString).join(', ')
+            if (items) {
+                bot.chat(` /pchat ${items}`)
+                bot.chat(`${items}`)
+            } else {
+                bot.chat(' /pchat Empty')
+            }
+        }
+
         // Command To Have Bot Pathfind To Player Who Ran Command
         if (command === 'come') {
             const target = bot.players[user].entity;
