@@ -1,6 +1,8 @@
 const mineflayer = require('mineflayer');
-const navigatePlugin = require('mineflayer-navigate')(mineflayer);
 const autoeat = require("mineflayer-auto-eat")
+const pathfinder = require('mineflayer-pathfinder').pathfinder
+const Movements = require('mineflayer-pathfinder').Movements
+const { GoalNear } = require('mineflayer-pathfinder').goals
 const blockFinderPlugin = require('mineflayer-blockfinder')(mineflayer);
 const inventoryViewer = require('mineflayer-web-inventory')
 require('dotenv').config();
@@ -8,18 +10,19 @@ require('dotenv').config();
 // Define Bot
 const bot = mineflayer.createBot({host: process.env.host, username: `${process.env.clan}_1`, version: "1.17.1"})
 bot.loadPlugin(blockFinderPlugin);
-bot.loadPlugin(navigatePlugin);
 bot.loadPlugin(inventoryViewer)
 bot.loadPlugin(autoeat);
+bot.loadPlugin(pathfinder)
 
 // On Spawn Event
+let mcData, defaultMove
 bot.once("spawn", () => {
     mcData = require('minecraft-data')(bot.version)
+    defaultMove = new Movements(bot, mcData)
     bot.autoEat.options = {priority: "foodPoints", startAt: 14, bannedFood: [],}
     setTimeout(() => bot.chat("/login slave_1"), 5000)
     // setTimeout(() => bot.chat(`/ptp ${process.env.username}`), 7500)
 })
-let mcData
 
 // Monitor Health Event
 bot.on("health", () => {
@@ -27,12 +30,6 @@ bot.on("health", () => {
     // Disable the plugin if the bot is at 20 food points
     else bot.autoEat.enable() // Else enable the plugin again
 })
-
-// Navigation Events
-bot.navigate.on('pathFound', function (path) {bot.chat(" /pchat found path. I can get there in " + path.length + " moves.");});
-bot.navigate.on('cannotFind', function (closestPath) {bot.chat(" /pchat unable to find path. getting as close as possible");bot.navigate.walk(closestPath);});
-bot.navigate.on('arrived', function () {bot.chat(" /pchat I have arrived");});
-bot.navigate.on('interrupted', function () {bot.chat(" /pchat stopping");});
 
 // On Chat Event
 bot.on('chat', function (username, message) {
@@ -62,9 +59,14 @@ bot.on('chat', function (username, message) {
 
         // Command To Have Bot Navigate To Player Who Ran Command
         else if (command === 'come') {
-            const target = bot.players[user].entity;
-            if (!target) return;
-            bot.navigate.to(target.position);
+            const target = bot.players[user] ? bot.players[user].entity : null
+            if (!target) {
+                bot.chat(' /pchat I cannot reach you, your out of render distance')
+            } else {
+                const position = target.position
+                bot.pathfinder.setMovements(defaultMove)
+                bot.pathfinder.setGoal(new GoalNear(position.x, position.y, position.z, 1))
+            }
         }
 
         // Command To Have Bot Stop Moving
@@ -89,6 +91,8 @@ bot.on('chat', function (username, message) {
                 }
             }
         }
+
+
 
     }
 });
