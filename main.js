@@ -1,4 +1,5 @@
 const mineflayer = require('mineflayer');
+const armorManager = require('mineflayer-armor-manager')
 const autoeat = require("mineflayer-auto-eat")
 const pathfinder = require('mineflayer-pathfinder').pathfinder
 const Movements = require('mineflayer-pathfinder').Movements
@@ -6,24 +7,31 @@ const { GoalNear } = require('mineflayer-pathfinder').goals
 const blockFinderPlugin = require('mineflayer-blockfinder')(mineflayer);
 const collectBlock = require('mineflayer-collectblock').plugin
 const inventoryViewer = require('mineflayer-web-inventory')
+const { mineflayer: mineflayerViewer } = require('prismarine-viewer')
+const pvp = require('mineflayer-pvp').plugin
+const v = require('vec3');
 require('dotenv').config();
 
 // Define Bot
-const bot = mineflayer.createBot({host: process.env.host, username: `${process.env.clan}_1`, version: "1.17.1"})
+const bot = mineflayer.createBot({host: process.env.host, username: `${process.env.clan}_2`, version: "1.17.1"})
 bot.loadPlugin(blockFinderPlugin);
 bot.loadPlugin(inventoryViewer)
 bot.loadPlugin(autoeat);
 bot.loadPlugin(pathfinder)
 bot.loadPlugin(collectBlock)
+bot.loadPlugin(armorManager);
+bot.loadPlugin(pvp)
 
 // On Spawn Event
 let mcData, defaultMove
 bot.once("spawn", () => {
+    mineflayerViewer(bot, { port: 3000, firstPerson : true})
     mcData = require('minecraft-data')(bot.version)
     defaultMove = new Movements(bot, mcData)
     bot.autoEat.options = {priority: "foodPoints", startAt: 14, bannedFood: [],}
-    setTimeout(() => bot.chat("/login slave_1"), 5000)
-    // setTimeout(() => bot.chat(`/ptp ${process.env.username}`), 7500)
+    setTimeout(() => bot.chat("/login slave_2"), 5000)
+    // setTimeout(() => bot.chat(`/ptp ${process.env.name}`), 7500)
+
 })
 
 // Monitor Health Event
@@ -33,8 +41,22 @@ bot.on("health", () => {
     else bot.autoEat.enable() // Else enable the plugin again
 })
 
+// Check for new enemies to attack
+bot.on('physicTick', async () => {
+    // Only look for mobs within 10 Blocks
+    const filter = e => e.type === 'mob' && e.position.distanceTo(bot.entity.position) < 10 && e.mobType !== 'Armor Stand'
+    entity = bot.nearestEntity(filter)
+     if (entity){
+        bot.pvp.attack(entity)
+    }
+
+})
+
+// Equip Best Armor Each Time New Item Is Picked Up
+bot.on("playerCollect", () => {bot.armorManager.equipAll()})
+
 // On Chat Event
-bot.on('chat', function (username, message) {
+bot.on('chat', function onChat (username, message) {
     // Parse Party Chat Commands Only
     if (username === "P"){
         if (username === bot.username) return;
@@ -72,7 +94,7 @@ bot.on('chat', function (username, message) {
         }
 
         // Command To Have Bot Stop Moving
-        else if (command === 'stop') {bot.navigate.stop();}
+        else if (command === 'stop') {bot.pathfinder.stop()}
 
         // Command To Have Bot Sleep In Nearest Bed
         else if (command === "sleep") {
@@ -102,7 +124,7 @@ bot.on('chat', function (username, message) {
                 return;
             }
 
-            const blocks = bot.findBlockSync({point: bot.entity.position, matching: blockType.id, maxDistance: 64, count: args[2]})
+            const blocks = bot.findBlockSync({point: bot.entity.position, matching: blockType.id, maxDistance: 256, count: args[2]})
             if (!blocks.length){
                 bot.chat('/pchat I dont see that block nearby')
                 return;
@@ -110,8 +132,8 @@ bot.on('chat', function (username, message) {
 
             const targets = []
             for (let i = 0; i < Math.min(blocks.length, args[2]); i++) {
-                console.log(blocks[i].position)
                 targets.push(bot.blockAt(blocks[i].position))
+                console.log(blocks[i].position)
             }
             bot.chat(`/pchat Found ${targets.length} ${args[1]}`)
 
@@ -121,10 +143,32 @@ bot.on('chat', function (username, message) {
                     bot.chat(` /pchat ${err.message}`)
                 } else {
                     // Collected All Blocks
-                    bot.chat(`Collected ${args[2]} ${args[1]}`)
+                    bot.chat(` /pchat Collected ${args[2]} ${args[1]}`)
                 }
             })
         }
 
+        else if (command === 'unload'){
+            unloadItems()
+            function unloadItems(){
+                // Define Chest Location And Items
+                const unloadChest = v(process.env.unloadchestx, process.env.unloadchesty, process.env.unloadchestz)
+                const inventoryItems = bot.inventory.items();
+
+                // Go To Chest If Not Already There
+                bot.pathfinder.setMovements(defaultMove)
+                bot.pathfinder.setGoal(new GoalNear(unloadChest.x, unloadChest.y, unloadChest.z, 1))
+                bot.on("goal_reached", () => {
+                    bot.openChest(bot.blockAt(unloadChest)).then(chest => {
+                        // Put Every Item In Unload Chest
+                        for (const item of inventoryItems) {
+                            setTimeout(() => {
+                                chest.deposit(item.type, item.metadata, item.count)
+                            }, 1000)
+                        }
+                    })
+                })
+            }
+        }
     }
 });
