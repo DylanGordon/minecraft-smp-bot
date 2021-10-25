@@ -4,6 +4,7 @@ const pathfinder = require('mineflayer-pathfinder').pathfinder
 const Movements = require('mineflayer-pathfinder').Movements
 const { GoalNear } = require('mineflayer-pathfinder').goals
 const blockFinderPlugin = require('mineflayer-blockfinder')(mineflayer);
+const collectBlock = require('mineflayer-collectblock').plugin
 const inventoryViewer = require('mineflayer-web-inventory')
 require('dotenv').config();
 
@@ -13,6 +14,7 @@ bot.loadPlugin(blockFinderPlugin);
 bot.loadPlugin(inventoryViewer)
 bot.loadPlugin(autoeat);
 bot.loadPlugin(pathfinder)
+bot.loadPlugin(collectBlock)
 
 // On Spawn Event
 let mcData, defaultMove
@@ -77,7 +79,6 @@ bot.on('chat', function (username, message) {
             goToSleep()
             async function goToSleep () {
                 const bed = bot.findBlocks({matching: block => bot.isABed(block)})
-                console.log(bed)
 
                 if (!bed.length){
                     bot.chat(' /pchat No Nearby Beds')
@@ -92,7 +93,38 @@ bot.on('chat', function (username, message) {
             }
         }
 
+        else if (command.startsWith("collect")){
+            const args = command.split(" ")
+            if (args === 1) {bot.chat(' /pchat invalid params')}
 
+            const blockType = mcData.blocksByName[args[1]]
+            if (!blockType){bot.chat(` /pchat Invalid block "${args[1]}" not found`)
+                return;
+            }
+
+            const blocks = bot.findBlockSync({point: bot.entity.position, matching: blockType.id, maxDistance: 64, count: args[2]})
+            if (!blocks.length){
+                bot.chat('/pchat I dont see that block nearby')
+                return;
+            }
+
+            const targets = []
+            for (let i = 0; i < Math.min(blocks.length, args[2]); i++) {
+                console.log(blocks[i].position)
+                targets.push(bot.blockAt(blocks[i].position))
+            }
+            bot.chat(`/pchat Found ${targets.length} ${args[1]}`)
+
+            bot.collectBlock.collect(targets, err => {
+                if (err) {
+                    // Log Error
+                    bot.chat(` /pchat ${err.message}`)
+                } else {
+                    // Collected All Blocks
+                    bot.chat(`Collected ${args[2]} ${args[1]}`)
+                }
+            })
+        }
 
     }
 });
