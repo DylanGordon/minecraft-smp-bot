@@ -44,7 +44,7 @@ bot.on("health", () => {
 // Check for new enemies to attack
 bot.on('physicTick', async () => {
     // Only look for mobs within 10 Blocks
-    const filter = e => e.type === 'mob' && e.position.distanceTo(bot.entity.position) < 10 && e.mobType !== 'Armor Stand'
+    const filter = e => e.type === 'mob' && e.position.distanceTo(bot.entity.position) < 6 && e.mobType !== 'Armor Stand'
     entity = bot.nearestEntity(filter)
      if (entity){
         bot.pvp.attack(entity)
@@ -94,7 +94,7 @@ bot.on('chat', function onChat (username, message) {
         }
 
         // Command To Have Bot Stop Moving
-        else if (command === 'stop') {bot.pathfinder.stop()}
+        else if (command === 'stop') {bot.pathfinder.setGoal(null)}
 
         // Command To Have Bot Sleep In Nearest Bed
         else if (command === "sleep") {
@@ -106,8 +106,14 @@ bot.on('chat', function onChat (username, message) {
                     bot.chat(' /pchat No Nearby Beds')
                 } else {
                     try {
-                        await bot.sleep(bot.blockAt(bed[0]))
-                        bot.chat(' /pchat sleeping')
+                        // Go To Bed If Not Already There
+                        bot.pathfinder.setMovements(defaultMove)
+                        bot.pathfinder.setGoal(new GoalNear(bed[0].x, bed[0].y, bed[0].z, 1))
+                        bot.on("goal_reached", async () => {
+                            await bot.sleep(bot.blockAt(bed[0]))
+                            bot.chat(' /pchat sleeping')
+                        })
+
                     } catch (err){
                         bot.chat(` /pchat I can't sleep: ${err.message}`)
                     }
@@ -133,7 +139,6 @@ bot.on('chat', function onChat (username, message) {
             const targets = []
             for (let i = 0; i < Math.min(blocks.length, args[2]); i++) {
                 targets.push(bot.blockAt(blocks[i].position))
-                console.log(blocks[i].position)
             }
             bot.chat(`/pchat Found ${targets.length} ${args[1]}`)
 
