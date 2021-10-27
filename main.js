@@ -56,7 +56,7 @@ bot.on('physicTick', async () => {
 bot.on("playerCollect", () => {bot.armorManager.equipAll()})
 
 // On Chat Event
-bot.on('chat', function onChat (username, message) {
+bot.on('chat', async function onChat (username, message) {
     // Parse Party Chat Commands Only
     if (username === "P"){
         if (username === bot.username) return;
@@ -89,7 +89,7 @@ bot.on('chat', function onChat (username, message) {
             } else {
                 const position = target.position
                 bot.pathfinder.setMovements(defaultMove)
-                bot.pathfinder.setGoal(new GoalNear(position.x, position.y, position.z, 1))
+                bot.pathfinder.goto(new GoalNear(position.x, position.y, position.z, 1))
             }
         }
 
@@ -98,26 +98,16 @@ bot.on('chat', function onChat (username, message) {
 
         // Command To Have Bot Sleep In Nearest Bed
         else if (command === "sleep") {
-            goToSleep()
-            async function goToSleep () {
-                const bed = bot.findBlocks({matching: block => bot.isABed(block)})
-
-                if (!bed.length){
-                    bot.chat(' /pchat No Nearby Beds')
-                } else {
-                    try {
-                        // Go To Bed If Not Already There
-                        bot.pathfinder.setMovements(defaultMove)
-                        bot.pathfinder.setGoal(new GoalNear(bed[0].x, bed[0].y, bed[0].z, 1))
-                        bot.on("goal_reached", async () => {
-                            await bot.sleep(bot.blockAt(bed[0]))
-                            bot.chat(' /pchat sleeping')
-                        })
-
-                    } catch (err){
-                        bot.chat(` /pchat I can't sleep: ${err.message}`)
-                    }
-                }
+            const bed = bot.findBlocks({matching: block => bot.isABed(block)})
+            if (!bed.length){
+                bot.chat(' /pchat No Nearby Beds')
+            } else {
+                    // Go To Bed If Not Already There
+                    bot.pathfinder.setMovements(defaultMove)
+                    bot.pathfinder.goto(new GoalNear(bed[0].x, bed[0].y, bed[0].z, 1))
+                    await bot.sleep(bot.blockAt(bed[0]))
+                        .then(() => {bot.chat(' /pchat sleeping')})
+                        .catch(error => {bot.chat(` /pchat I can't sleep: ${error}`)})
             }
         }
 
@@ -154,26 +144,27 @@ bot.on('chat', function onChat (username, message) {
         }
 
         else if (command === 'unload'){
-            unloadItems()
-            function unloadItems(){
-                // Define Chest Location And Items
-                const unloadChest = v(process.env.unloadchestx, process.env.unloadchesty, process.env.unloadchestz)
-                const inventoryItems = bot.inventory.items();
+            // Define Chest Location And Items
+            const unloadChest = v(process.env.unloadchestx, process.env.unloadchesty, process.env.unloadchestz)
+            const inventoryItems = bot.inventory.items();
 
-                // Go To Chest If Not Already There
-                bot.pathfinder.setMovements(defaultMove)
-                bot.pathfinder.setGoal(new GoalNear(unloadChest.x, unloadChest.y, unloadChest.z, 1))
-                bot.on("goal_reached", () => {
-                    bot.openChest(bot.blockAt(unloadChest)).then(chest => {
-                        // Put Every Item In Unload Chest
-                        for (const item of inventoryItems) {
-                            setTimeout(() => {
-                                chest.deposit(item.type, item.metadata, item.count)
-                            }, 1000)
-                        }
+            // Go To Chest If Not Already There
+            bot.pathfinder.setMovements(defaultMove)
+            await bot.pathfinder.goto(new GoalNear(unloadChest.x, unloadChest.y, unloadChest.z, 1))
+
+            bot.openChest(bot.blockAt(unloadChest)).then(async chest => {
+                // Put Every Item In Unload Chest
+                for (const item of inventoryItems) {
+                    if (!item || !item.type) continue;
+                    await chest.deposit(item.type, item.metadata, item.count).catch(async error => {
+                        if (error.message === "destination full") {bot.chat(` /pchat error depositing ${item.name} x${item.count}`)}
                     })
-                })
-            }
+                }
+                await chest.close()
+                bot.chat(' /pchat Finished unloading')
+            })
+
+
         }
     }
 });
